@@ -60,6 +60,21 @@ jobs:
           const path = 'wrangler.toml';
           const lines = fs.readFileSync(path, 'utf8').split(/\r?\n/);
           const output = [];
+          const roleConfig = [
+            '',
+            '# Default role for this deployment.',
+            'USER_DEFAULT_ROLE = "user"',
+            'USER_ROLES = [',
+            '  { domains = ["kir.us.ci", "gpt.kir.us.ci", "gem.kir.us.ci"], role = "user", prefix = "keu" },',
+            ']',
+          ];
+          const isSectionHeader = (line) => {
+            const stripped = line.trim();
+            return stripped.startsWith('[') && stripped.endsWith(']');
+          };
+          let inVars = false;
+          let sawVars = false;
+          let inserted = false;
           let i = 0;
           while (i < lines.length) {
             const line = lines[i];
@@ -80,18 +95,25 @@ jobs:
               }
               continue;
             }
+            if (isSectionHeader(line)) {
+              if (inVars && !inserted) {
+                output.push(...roleConfig);
+                inserted = true;
+              }
+              inVars = stripped.trim() === '[vars]';
+              sawVars = sawVars || inVars;
+              output.push(line);
+              i += 1;
+              continue;
+            }
             output.push(line);
             i += 1;
           }
 
-          output.push(
-            '',
-            '# Default role for this deployment.',
-            'USER_DEFAULT_ROLE = "user"',
-            'USER_ROLES = [',
-            '  { domains = ["kir.us.ci", "gpt.kir.us.ci", "gem.kir.us.ci"], role = "user", prefix = "keu" },',
-            ']',
-          );
+          if (!inserted) {
+            if (!sawVars) output.push('', '[vars]');
+            output.push(...roleConfig);
+          }
           fs.writeFileSync(path, output.join('\n') + '\n', 'utf8');
           NODE
           
