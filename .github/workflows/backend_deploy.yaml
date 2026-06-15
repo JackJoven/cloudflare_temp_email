@@ -54,7 +54,7 @@ jobs:
           cd worker/
           # ✅ 修复核心：使用环境变量写入，避免 Shell 解析特殊字符
           printf '%s\n' "$WRANGLER_TOML_CONTENT" > wrangler.toml
-          node <<'NODE'
+          node --input-type=commonjs <<'NODE'
           const fs = require('fs');
 
           const path = 'wrangler.toml';
