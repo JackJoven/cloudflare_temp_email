@@ -54,6 +54,40 @@ jobs:
           cd worker/
           # ✅ 修复核心：使用环境变量写入，避免 Shell 解析特殊字符
           printf '%s\n' "$WRANGLER_TOML_CONTENT" > wrangler.toml
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path("wrangler.toml")
+          lines = path.read_text(encoding="utf-8").splitlines()
+          output = []
+          i = 0
+          while i < len(lines):
+              line = lines[i]
+              stripped = line.lstrip()
+              key = stripped.split("=", 1)[0].strip() if "=" in stripped and not stripped.startswith("#") else ""
+              if key == "USER_DEFAULT_ROLE":
+                  i += 1
+                  continue
+              if key == "USER_ROLES":
+                  bracket_balance = line.count("[") - line.count("]")
+                  i += 1
+                  while i < len(lines) and bracket_balance > 0:
+                      bracket_balance += lines[i].count("[") - lines[i].count("]")
+                      i += 1
+                  continue
+              output.append(line)
+              i += 1
+
+          output.extend([
+              "",
+              "# Default role for this deployment.",
+              'USER_DEFAULT_ROLE = "user"',
+              "USER_ROLES = [",
+              '  { domains = ["kir.us.ci", "gpt.kir.us.ci", "gem.kir.us.ci"], role = "user", prefix = "keu" },',
+              "]",
+          ])
+          path.write_text("\n".join(output) + "\n", encoding="utf-8")
+          PY
           
           pnpm install --no-frozen-lockfile
 

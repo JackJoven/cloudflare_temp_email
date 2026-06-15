@@ -7,6 +7,34 @@ import { CONSTANTS } from "../constants";
 import { GeoData, UserInfo, UserSettings } from "../models";
 import { sendMail } from "../mails_api/send_mail_api";
 
+const assignDefaultRole = async (
+    c: Context<HonoCustomType>,
+    email: string,
+    msgs: ReturnType<typeof i18n.getMessagesbyContext>
+): Promise<Response | null> => {
+    const defaultRole = getStringValue(c.env.USER_DEFAULT_ROLE);
+    if (!defaultRole) return null;
+    const user_roles = getUserRoles(c);
+    if (!user_roles.find((r) => r.role === defaultRole)) {
+        return c.text(msgs.InvalidUserDefaultRoleMsg, 500);
+    }
+    const user_id = await c.env.DB.prepare(
+        `SELECT id FROM users where user_email = ?`
+    ).bind(email).first<number | undefined | null>("id");
+    if (!user_id) {
+        return c.text(msgs.UserNotFoundMsg, 500);
+    }
+    const { success } = await c.env.DB.prepare(
+        `INSERT INTO user_roles (user_id, role_text)`
+        + ` VALUES (?, ?)`
+        + ` ON CONFLICT(user_id) DO NOTHING`
+    ).bind(user_id, defaultRole).run();
+    if (!success) {
+        return c.text(msgs.FailedUpdateUserDefaultRoleMsg, 500);
+    }
+    return null;
+}
+
 export default {
     verifyCode: async (c: Context<HonoCustomType>) => {
         const { email, cf_token } = await c.req.json();
@@ -143,6 +171,8 @@ export default {
                 }
                 return c.text(`${msgs.FailedToRegisterMsg}: ${error.message}`, 500)
             }
+            const defaultRoleError = await assignDefaultRole(c, email, msgs);
+            if (defaultRoleError) return defaultRoleError;
             return c.json({ success: true })
         }
         // if enable mail verify, on conflict update
@@ -157,28 +187,8 @@ export default {
         if (!success) {
             return c.text(msgs.FailedToRegisterMsg, 400);
         }
-        const defaultRole = getStringValue(c.env.USER_DEFAULT_ROLE);
-        if (!defaultRole) return c.json({ success: true })
-        const user_roles = getUserRoles(c);
-        if (!user_roles.find((r) => r.role === defaultRole)) {
-            return c.text(msgs.InvalidUserDefaultRoleMsg, 500);
-        }
-        // find user_id
-        const user_id = await c.env.DB.prepare(
-            `SELECT id FROM users where user_email = ?`
-        ).bind(email).first<number | undefined | null>("id");
-        if (!user_id) {
-            return c.text(msgs.UserNotFoundMsg, 500);
-        }
-        // update user roles
-        const { success: success2 } = await c.env.DB.prepare(
-            `INSERT INTO user_roles (user_id, role_text)`
-            + ` VALUES (?, ?)`
-            + ` ON CONFLICT(user_id) DO NOTHING`
-        ).bind(user_id, defaultRole).run();
-        if (!success2) {
-            return c.text(msgs.FailedUpdateUserDefaultRoleMsg, 500);
-        }
+        const defaultRoleError = await assignDefaultRole(c, email, msgs);
+        if (defaultRoleError) return defaultRoleError;
         return c.json({ success: true })
     },
     login: async (c: Context<HonoCustomType>) => {
