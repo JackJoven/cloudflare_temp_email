@@ -84,6 +84,11 @@ jobs:
             const key = stripped.includes('=') && !stripped.startsWith('#')
               ? stripped.split('=', 1)[0].trim()
               : '';
+            if (key === 'main') {
+              output.push('main = "src/worker.ts"');
+              i += 1;
+              continue;
+            }
             if (key === 'USER_DEFAULT_ROLE') {
               i += 1;
               continue;
